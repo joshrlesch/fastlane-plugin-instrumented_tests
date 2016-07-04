@@ -43,6 +43,11 @@ To automatically fix many of the styling issues, use
 rubocop -a
 ```
 
+## Other notes
+
+Found while searching for this type of plugin, https://github.com/fastlane/fastlane/pull/4315 https://github.com/joshrlesch/fastlane/tree/fastlane-instrument-tests
+Changed to plugin infrastructure.
+
 ## Issues and Feedback
 
 For any other issues and feedback about this plugin, please submit it to this repository.
