@@ -8,50 +8,67 @@ module Fastlane
 
     class InstrumentedTestsAction < Action
       def self.run(params)
-        file = Tempfile.new('emulator_output')
+        setup_parameters(params)
+        begin
+          # Set up params
+          delete_old_emulators(params)
+          create_emulator(params)
+          start_emulator(params)
 
-        # Set up params
-        avd_name = "--name \"#{params[:avd_name]}\""
-        target_id = "--target #{params[:target_id]}"
-        avd_options = params[:avd_options] unless params[:avd_options].nil?
-        avd_abi = "--abi #{params[:avd_abi]}" unless params[:avd_abi].nil?
-        avd_tag = "--tag #{params[:avd_tag]}" unless params[:avd_tag].nil?
-        create_avd = ["#{params[:sdk_path]}/tools/android", "create avd", avd_name, target_id, avd_abi, avd_tag, avd_options].join(" ")
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "-gpu on -no-boot-anim &>#{file.path} &"]
+          begin
+            wait_emulator_boot(params)
+            execute_gradle(params)
+          ensure
+            stop_emulator(params)
+          end
+        ensure
+          @file.close
+          @file.unlink
+        end
+      end
+
+      def self.setup_parameters(params)
+        # port must be an even integer number between 5554 and 5680
+        params[:avd_port]=Random.rand(50)*2+5580 if params[:avd_port].nil?
+
+        @android_serial="emulator-#{params[:avd_port]}"
+        # maybe create this in a way that the creation and destruction are in the same method
+        @file = Tempfile.new('emulator_output')
+      end
+
+      def self.delete_old_emulators(params)
         devices = `#{params[:sdk_path]}/tools/android list avd`.chomp
 
         # Delete avd if one already exists for clean state.
         unless devices.match(/#{params[:avd_name]}/).nil?
           Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
         end
+      end
+
+      def self.create_emulator(params)
+        avd_name = "--name \"#{params[:avd_name]}\""
+        target_id = "--target #{params[:target_id]}"
+        avd_options = params[:avd_options] unless params[:avd_options].nil?
+        avd_abi = "--abi #{params[:avd_abi]}" unless params[:avd_abi].nil?
+        avd_tag = "--tag #{params[:avd_tag]}" unless params[:avd_tag].nil?
+        create_avd = ["#{params[:sdk_path]}/tools/android", "create avd", avd_name, target_id, avd_abi, avd_tag, avd_options].join(" ")
 
         UI.important("Creating AVD...")
         Action.sh(create_avd)
-
-        UI.important("Starting AVD...")
-        begin
-          Action.sh(start_avd)
-
-          # Wait for device to be fully
-          boot_emulator(params)
-
-          begin
-            Fastlane::Actions::GradleAction.run(task: params[:task], flags: params[:flags], project_dir: params[:project_dir], 
-              print_command: true, print_command_output: true)
-          ensure
-            stop_emulator(params, file)
-          end
-        ensure
-          file.close
-          file.unlink
-        end
       end
 
-      def self.boot_emulator(params)
+      def self.start_emulator(params)
+        UI.important("Starting AVD...")
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "-gpu on -no-boot-anim -port #{params[:avd_port]} &>#{@file.path} &"]
+        Action.sh(start_avd)
+      end
+
+      def self.wait_emulator_boot(params)
         UI.important("Waiting for emulator to finish booting... May take a few minutes...")
+        adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
         loop do
-          bootCompletedCommand = "#{params[:sdk_path]}/platform-tools/adb shell getprop sys.boot_completed" 
-          stdout, _stdeerr, _status = Open3.capture3(bootCompletedCommand)
+          boot_complete_cmd = "ANDROID_SERIAL=#{@android_serial} #{params[:sdk_path]}/platform-tools/adb shell getprop sys.boot_completed" 
+          stdout, _stdeerr, _status = Open3.capture3(boot_complete_cmd)
 
           if stdout.strip == "1"
             UI.success("Emulator Booted!")
@@ -60,19 +77,15 @@ module Fastlane
         end
       end
 
-      def self.stop_emulator(params, file)
+      def self.execute_gradle(params)
+        Fastlane::Actions::GradleAction.run(task: params[:task], flags: params[:flags], project_dir: params[:project_dir], 
+          serial: @android_serial, print_command: true, print_command_output: true)
+      end
+
+      def self.stop_emulator(params)
         UI.important("Shutting down emulator...")
         adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
-        temp = File.open(file.path).read
-        port = temp.match(/console on port (\d+),/)
-        if port
-          port = port[1]
-        else
-          UI.important("Could not find emulator port number, using default port.")
-          port = "5554"
-        end
-
-        adb.trigger(command: "emu kill", serial: "emulator-#{port}")
+        adb.trigger(command: "emu kill", serial: @android_serial)
 
         UI.success("Deleting emulator...")
         Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
@@ -116,6 +129,11 @@ module Fastlane
                                        env_name: "AVD_TAG",
                                        description: "The sys-img tag to use for the AVD. The default is to auto-select if the platform has only one tag for its system images",
                                        is_string: true,
+                                       optional: true),
+          FastlaneCore::ConfigItem.new(key: :avd_port,
+                                       env_name: "AVD_PORT",
+                                       description: "The port used for communication with the emulator. If not set it is randomly selected",
+                                       is_string: false,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :sdk_path,
                                        env_name: "ANDROID_HOME",
