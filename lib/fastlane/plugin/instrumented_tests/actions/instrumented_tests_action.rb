@@ -10,7 +10,6 @@ module Fastlane
       def self.run(params)
         setup_parameters(params)
         begin
-          # Set up params
           delete_old_emulators(params)
           create_emulator(params)
           start_emulator(params)
@@ -22,18 +21,21 @@ module Fastlane
             stop_emulator(params)
           end
         ensure
-          @file.close
-          @file.unlink
+          @emulator_output.close
+          @emulator_output.unlink
         end
       end
 
       def self.setup_parameters(params)
         # port must be an even integer number between 5554 and 5680
         params[:avd_port]=Random.rand(50)*2+5580 if params[:avd_port].nil?
+        raise ":avd_port must be at least 5554" if params[:avd_port]<5554
+        raise ":avd_port must be lower than 5680" if params[:avd_port]>5680
+        raise ":avd_port must be an even number" if params[:avd_port]%2 != 0
 
         @android_serial="emulator-#{params[:avd_port]}"
         # maybe create this in a way that the creation and destruction are in the same method
-        @file = Tempfile.new('emulator_output')
+        @emulator_output = Tempfile.new('emulator_output')
       end
 
       def self.delete_old_emulators(params)
@@ -59,7 +61,7 @@ module Fastlane
 
       def self.start_emulator(params)
         UI.important("Starting AVD...")
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "-gpu on -no-boot-anim -port #{params[:avd_port]} &>#{@file.path} &"]
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "-gpu on -no-boot-anim -port #{params[:avd_port]} &>#{@emulator_output.path} &"]
         Action.sh(start_avd)
       end
 
