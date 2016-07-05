@@ -8,7 +8,6 @@ module Fastlane
 
     class InstrumentedTestsAction < Action
       def self.run(params)
-        gradle = Helper::GradleHelper.new(gradle_path: Dir["./gradlew"].last)
         file = Tempfile.new('emulator_output')
 
         # Set up params
@@ -26,21 +25,21 @@ module Fastlane
           Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
         end
 
-        Helper.log.info("Creating AVD...".yellow)
+        UI.important("Creating AVD...")
         Action.sh(create_avd)
 
-        Helper.log.info("Starting AVD....".yellow)
+        UI.important("Starting AVD...")
         begin
           Action.sh(start_avd)
 
           # Wait for device to be fully
-          boot_emulator
+          boot_emulator(params)
 
-          Helper.log.info("Executing gradle command...".green)
           begin
-            gradle.trigger(task: params[:task], flags: params[:flags], serial: nil)
+            Fastlane::Actions::GradleAction.run(task: params[:task], flags: params[:flags], project_dir: params[:project_dir], 
+              print_command: true, print_command_output: true)
           ensure
-            stop_emulator
+            stop_emulator(params, file)
           end
         ensure
           file.close
@@ -48,34 +47,34 @@ module Fastlane
         end
       end
 
-      def self.boot_emulator
-        Helper.log.info("Waiting for emulator to finish booting.....".yellow)
+      def self.boot_emulator(params)
+        UI.important("Waiting for emulator to finish booting... May take a few minutes...")
         loop do
-          stdout, _stdeerr, _status = Open3.capture3("#{params[:sdk_path]}/platform-tools/adb shell getprop sys.boot_completed")
+          bootCompletedCommand = "#{params[:sdk_path]}/platform-tools/adb shell getprop sys.boot_completed" 
+          stdout, _stdeerr, _status = Open3.capture3(bootCompletedCommand)
 
           if stdout.strip == "1"
-            Helper.log.info("Emulator Booted!".green)
+            UI.success("Emulator Booted!")
             break
           end
         end
       end
 
-      def self.stop_emulator
+      def self.stop_emulator(params, file)
+        UI.important("Shutting down emulator...")
         adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
         temp = File.open(file.path).read
         port = temp.match(/console on port (\d+),/)
-
         if port
           port = port[1]
         else
-          Helper.log.info("Could not find emulator port number, using default port.".yellow)
+          UI.important("Could not find emulator port number, using default port.")
           port = "5554"
         end
 
-        Helper.log.info("Shutting down emulator...".green)
         adb.trigger(command: "emu kill", serial: "emulator-#{port}")
 
-        Helper.log.info("Deleting emulator....".green)
+        UI.success("Deleting emulator...")
         Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
       end
 
@@ -119,21 +118,27 @@ module Fastlane
                                        is_string: true,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :sdk_path,
-                                       env_name: "SDK_PATH",
+                                       env_name: "ANDROID_HOME",
                                        description: "The path to your android sdk directory",
                                        is_string: true,
-                                       default_value: ENV['SDK_PATH'],
+                                       default_value: ENV['ANDROID_HOME'],
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :flags,
-                                       env_name: "GRADLE_FLAGS",
+                                       env_name: "FL_GRADLE_FLAGS",
                                        description: "All parameter flags you want to pass to the gradle command, e.g. `--exitcode --xml file.xml`",
                                        optional: true,
                                        is_string: true),
           FastlaneCore::ConfigItem.new(key: :task,
-                                       env_name: "GRADLE_TASK",
+                                       env_name: "FL_GRADLE_TASK",
                                        description: "The gradle task you want to execute",
                                        is_string: true,
-                                       optional: false)
+                                       optional: true,
+                                       default_value: "connectedCheck"),
+          FastlaneCore::ConfigItem.new(key: :project_dir,
+                                       env_name: 'FL_GRADLE_PROJECT_DIR',
+                                       description: 'The root directory of the gradle project. Defaults to `.`',
+                                       default_value: '.',
+                                       is_string: true)
         ]
       end
 
