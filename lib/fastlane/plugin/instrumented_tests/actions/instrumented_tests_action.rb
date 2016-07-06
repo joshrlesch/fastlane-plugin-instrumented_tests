@@ -33,6 +33,8 @@ module Fastlane
         raise ":avd_port must be lower than 5680" if params[:avd_port]>5680
         raise ":avd_port must be an even number" if params[:avd_port]%2 != 0
 
+        params[:avd_hide]=Helper.is_ci? if params[:avd_hide].nil?
+
         @android_serial="emulator-#{params[:avd_port]}"
         # maybe create this in a way that the creation and destruction are in the same method
         @emulator_output = Tempfile.new('emulator_output')
@@ -41,7 +43,6 @@ module Fastlane
       def self.delete_old_emulators(params)
         devices = `#{params[:sdk_path]}/tools/android list avd`.chomp
 
-        # Delete avd if one already exists for clean state.
         unless devices.match(/#{params[:avd_name]}/).nil?
           Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
         end
@@ -61,7 +62,9 @@ module Fastlane
 
       def self.start_emulator(params)
         UI.important("Starting AVD...")
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "-gpu on -no-boot-anim -port #{params[:avd_port]} &>#{@emulator_output.path} &"]
+        ui_args="-gpu on"
+        ui_args="-gpu on -no-audio -no-window" if params[:avd_hide]
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]} &>#{@emulator_output.path} &"]
         Action.sh(start_avd)
       end
 
@@ -76,6 +79,7 @@ module Fastlane
             UI.success("Emulator Booted!")
             break
           end
+          sleep(1)
         end
       end
 
@@ -137,6 +141,11 @@ module Fastlane
                                        description: "The port used for communication with the emulator. If not set it is randomly selected",
                                        is_string: false,
                                        optional: true),
+          FastlaneCore::ConfigItem.new(key: :avd_hide,
+                                       env_name: "AVD_HIDE",
+                                       description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
+                                       is_string: false,
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :sdk_path,
                                        env_name: "ANDROID_HOME",
                                        description: "The path to your android sdk directory",
@@ -167,7 +176,7 @@ module Fastlane
       end
 
       def self.authors
-        ["joshrlesch"]
+        ["joshrlesch", "lexxdark"]
       end
 
       def self.is_supported?(platform)
