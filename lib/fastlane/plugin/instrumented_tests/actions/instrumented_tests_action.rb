@@ -63,7 +63,7 @@ module Fastlane
       def self.start_emulator(params)
         UI.important("Starting AVD...")
         ui_args="-gpu on"
-        ui_args="-gpu on -no-audio -no-window" if params[:avd_hide]
+        ui_args="-no-audio -no-window" if params[:avd_hide]
         start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]} &>#{@emulator_output.path} &"]
         Action.sh(start_avd)
       end
