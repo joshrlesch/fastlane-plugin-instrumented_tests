@@ -9,20 +9,23 @@ module Fastlane
     class InstrumentedTestsAction < Action
       def self.run(params)
         setup_parameters(params)
+        delete_old_emulators(params)
         begin
-          delete_old_emulators(params)
-          create_emulator(params)
-          start_emulator(params)
-
           begin
+            create_emulator(params)
+            start_emulator(params)
+
             wait_emulator_boot(params)
             execute_gradle(params)
           ensure
             stop_emulator(params)
           end
+
+        rescue Exception => e
+          print_emulator_output(params)
+          raise e
         ensure
-          @emulator_output.close
-          @emulator_output.unlink
+          close_emulator_streams(params)
         end
       end
 
@@ -36,8 +39,6 @@ module Fastlane
         params[:avd_hide]=Helper.is_ci? if params[:avd_hide].nil?
 
         @android_serial="emulator-#{params[:avd_port]}"
-        # maybe create this in a way that the creation and destruction are in the same method
-        @emulator_output = Tempfile.new('emulator_output')
       end
 
       def self.delete_old_emulators(params)
@@ -55,7 +56,6 @@ module Fastlane
         avd_abi = "--abi #{params[:avd_abi]}" unless params[:avd_abi].nil?
         avd_tag = "--tag #{params[:avd_tag]}" unless params[:avd_tag].nil?
         create_avd = ["#{params[:sdk_path]}/tools/android", "create avd", avd_name, target_id, avd_abi, avd_tag, avd_options].join(" ")
-
         UI.important("Creating AVD...")
         Action.sh(create_avd)
       end
@@ -63,17 +63,34 @@ module Fastlane
       def self.start_emulator(params)
         UI.important("Starting AVD...")
         ui_args="-gpu on"
-        ui_args="-no-audio -no-window" if params[:avd_hide]
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]} &>#{@emulator_output.path} &"]
-        Action.sh(start_avd)
+        ui_args="-no-window" if params[:avd_hide]
+        ui_args=params[:avd_emulator_options] if params[:avd_emulator_options] != nil
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
+
+        UI.command(start_avd)
+        stdin, @emulator_output, @emulator_thread = Open3.popen2e(start_avd)
+        stdin.close
       end
 
       def self.wait_emulator_boot(params)
+        timeout = Time.now + params[:boot_timeout]
         UI.important("Waiting for emulator to finish booting... May take a few minutes...")
-        adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
+
+        adb_path = "#{params[:sdk_path]}/platform-tools/adb"
+        raise "Unable to find adb in #{adb_path}" unless File.file?(adb_path)
         loop do
-          boot_complete_cmd = "ANDROID_SERIAL=#{@android_serial} #{params[:sdk_path]}/platform-tools/adb shell getprop sys.boot_completed" 
+          boot_complete_cmd = "ANDROID_SERIAL=#{@android_serial} #{adb_path} shell getprop sys.boot_completed" 
           stdout, _stdeerr, _status = Open3.capture3(boot_complete_cmd)
+
+          if @emulator_thread != nil && (@emulator_thread.status == false || @emulator_thread.status == true)
+            UI.error("Emulator unexpectedly quit!")
+            raise "Emulator unexpectedly quit"
+          end
+
+          if (Time.now > timeout)
+            UI.error("Waited #{params[:boot_timeout]} seconds for emulator to boot without success")
+            raise "Emulator didn't boot"
+          end
 
           if stdout.strip == "1"
             UI.success("Emulator Booted!")
@@ -83,18 +100,40 @@ module Fastlane
         end
       end
 
-      def self.execute_gradle(params)
-        Fastlane::Actions::GradleAction.run(task: params[:task], flags: params[:flags], project_dir: params[:project_dir], 
-          serial: @android_serial, print_command: true, print_command_output: true)
+      def self.stop_emulator(params)
+        begin
+          UI.important("Shutting down emulator...")
+          adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
+          adb.trigger(command: "emu kill", serial: @android_serial)
+        rescue
+          UI.message("Emulator is not listening for our commands...")
+          UI.message("Current status of emulator process is: #{@emulator_thread.status}")
+
+          if @emulator_thread != nil && @emulator_thread.status != true && @emulator_thread.status != false
+            UI.important("Emulator still running... Killing PID #{@emulator_thread.pid}!")
+            Process.kill("KILL", @emulator_thread.pid)
+          end
+
+        end
+
+        UI.important("Deleting emulator...")
+        Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
       end
 
-      def self.stop_emulator(params)
-        UI.important("Shutting down emulator...")
-        adb = Helper::AdbHelper.new(adb_path: "#{params[:sdk_path]}/platform-tools/adb")
-        adb.trigger(command: "emu kill", serial: @android_serial)
+      def self.print_emulator_output(params)
+        UI.error("Error while trying to execute instrumentation tests. Output from emulator:")
+        @emulator_output.readlines.each do |line|
+          UI.error(line.gsub(/\r|\n/, " "))
+        end
+      end
 
-        UI.success("Deleting emulator...")
-        Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
+      def self.close_emulator_streams(params)
+        @emulator_output.close
+      end
+
+      def self.execute_gradle(params)
+        Fastlane::Actions::GradleAction.run(task: params[:task], flags: params[:flags], project_dir: params[:project_dir],
+                                            serial: @android_serial, print_command: true, print_command_output: true)
       end
 
       def self.description
@@ -123,7 +162,7 @@ module Fastlane
                                        optional: false),
           FastlaneCore::ConfigItem.new(key: :avd_options,
                                        env_name: "AVD_OPTIONS",
-                                       description: "Other avd options in the form of a <option>=<value> list, i.e \"--scale 96dpi --dpi-device 160\"",
+                                       description: "Other avd command line options passed to 'android create avd ...'. i.e. \"--scale 96dpi --dpi-device 160\"",
                                        is_string: true,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :avd_abi,
@@ -141,10 +180,23 @@ module Fastlane
                                        description: "The port used for communication with the emulator. If not set it is randomly selected",
                                        is_string: false,
                                        optional: true),
+          FastlaneCore::ConfigItem.new(key: :boot_timeout,
+                                       env_name: "BOOT_TIMEOUT",
+                                       description: "Number of seconds to wait for the emulator to boot",
+                                       is_string: false,
+                                       optional: true,
+                                       default_value: 500),
           FastlaneCore::ConfigItem.new(key: :avd_hide,
                                        env_name: "AVD_HIDE",
                                        description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
                                        is_string: false,
+                                       optional: true),
+          FastlaneCore::ConfigItem.new(key: :avd_emulator_options,
+                                       env_name: "AVD_EMULATOR_OPTIONS",
+                                       description: "Other options passed to the emulator command ('emulator -avd AVD_NAME ...')." +
+                                           "Defaults are '-gpu on' when AVD_HIDE is false and '-no-window' otherwise. " +
+                                           "For macs running the CI you might want to use '-no-audio -no-window'",
+                                       is_string: true,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :sdk_path,
                                        env_name: "ANDROID_HOME",
