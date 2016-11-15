@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.author        = %q{Silviu Paragina}
   spec.email         = %q{silviu.paragina@mready.net}
 
-  spec.summary       = %q{New action to run instrumented tests for android. This basically creates and boots an emulator before running an gradle commands so that you can run instrumented tests against that emulator. After the gradle command is executed, the avd gets shut down and deleted. This is really helpful on CI services, keeping them clean and always having a fresh avd for testing.}
+  spec.summary       = %q{New action to run instrumented tests for android. This plugin creates and boots an emulator before running a gradle command so that you can run instrumented tests against that emulator. After the gradle command is executed, the avd gets shut down and deleted. This is really helpful on CI services, keeping them clean and always having a fresh avd for testing.}
   spec.homepage      = "https://github.com/joshrlesch/fastlane-plugin-instrumented_tests"
   spec.license       = "MIT"
 
