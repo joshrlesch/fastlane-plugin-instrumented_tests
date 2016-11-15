@@ -63,8 +63,8 @@ module Fastlane
       def self.start_emulator(params)
         UI.important("Starting AVD...")
         ui_args="-gpu on"
-        ui_args="-no-audio -no-window" if params[:avd_hide]
-        ui_args=params[:avd_ui_opt] if params[:avd_ui_opt] != nil
+        ui_args="-no-window" if params[:avd_hide]
+        ui_args=params[:avd_emulator_options] if params[:avd_emulator_options] != nil
         start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
 
         UI.command(start_avd)
@@ -116,7 +116,7 @@ module Fastlane
 
         end
 
-        UI.success("Deleting emulator...")
+        UI.important("Deleting emulator...")
         Action.sh("#{params[:sdk_path]}/tools/android delete avd -n #{params[:avd_name]}")
       end
 
@@ -162,7 +162,7 @@ module Fastlane
                                        optional: false),
           FastlaneCore::ConfigItem.new(key: :avd_options,
                                        env_name: "AVD_OPTIONS",
-                                       description: "Other avd options in the form of a <option>=<value> list, i.e \"--scale 96dpi --dpi-device 160\"",
+                                       description: "Other avd command line options passed to 'android create avd ...'. i.e. \"--scale 96dpi --dpi-device 160\"",
                                        is_string: true,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :avd_abi,
@@ -191,9 +191,9 @@ module Fastlane
                                        description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
                                        is_string: false,
                                        optional: true),
-          FastlaneCore::ConfigItem.new(key: :avd_ui_opt,
-                                       env_name: "AVD_UI_OPT",
-                                       description: "AVD options for running the emulator. " +
+          FastlaneCore::ConfigItem.new(key: :avd_emulator_options,
+                                       env_name: "AVD_EMULATOR_OPTIONS",
+                                       description: "Other options passed to the emulator command ('emulator -avd AVD_NAME ...')." +
                                            "Defaults are '-gpu on' when AVD_HIDE is false and '-no-window' otherwise. " +
                                            "For macs running the CI you might want to use '-no-audio -no-window'",
                                        is_string: true,
