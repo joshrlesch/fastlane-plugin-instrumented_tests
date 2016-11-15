@@ -64,6 +64,7 @@ module Fastlane
         UI.important("Starting AVD...")
         ui_args="-gpu on"
         ui_args="-no-audio -no-window" if params[:avd_hide]
+        ui_args=params[:avd_ui_opt] if params[:avd_ui_opt] != nil
         start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
 
         UI.command(start_avd)
@@ -80,6 +81,11 @@ module Fastlane
         loop do
           boot_complete_cmd = "ANDROID_SERIAL=#{@android_serial} #{adb_path} shell getprop sys.boot_completed" 
           stdout, _stdeerr, _status = Open3.capture3(boot_complete_cmd)
+
+          if @emulator_thread != nil && (@emulator_thread.status == false || @emulator_thread.status == true)
+            UI.error("Emulator unexpectedly quit!")
+            raise "Emulator unexpectedly quit"
+          end
 
           if (Time.now > timeout)
             UI.error("Waited #{params[:boot_timeout]} seconds for emulator to boot without success")
@@ -115,7 +121,7 @@ module Fastlane
       end
 
       def self.print_emulator_output(params)
-        UI.error("Emulator failed to boot. Output from emulator:")
+        UI.error("Error while trying to execute instrumentation tests. Output from emulator:")
         @emulator_output.readlines.each do |line|
           UI.error(line.gsub(/\r|\n/, " "))
         end
@@ -184,6 +190,13 @@ module Fastlane
                                        env_name: "AVD_HIDE",
                                        description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
                                        is_string: false,
+                                       optional: true),
+          FastlaneCore::ConfigItem.new(key: :avd_ui_opt,
+                                       env_name: "AVD_UI_OPT",
+                                       description: "AVD options for running the emulator. " +
+                                           "Defaults are '-gpu on' when AVD_HIDE is false and '-no-window' otherwise. " +
+                                           "For macs running the CI you might want to use '-no-audio -no-window'",
+                                       is_string: true,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :sdk_path,
                                        env_name: "ANDROID_HOME",
