@@ -14,7 +14,7 @@ fastlane add_plugin instrumented_tests
 
 Run instrumented tests for android. 
 
-This basically creates and boots an emulator before running an gradle commands so that you can run instrumented tests against that emulator. After the gradle command is executed, the avd gets shut down and deleted. This is really helpful on CI services, keeping them clean and always having a fresh avd for testing.
+This basically creates and boots an emulator before running gradle commands so that you can run instrumented tests against that emulator. After the gradle command is executed, the avd gets shut down and deleted. This is really helpful on CI services, keeping them clean and always having a fresh avd for testing.
 
 ## Example
 
