@@ -31,9 +31,9 @@ module Fastlane
 
       def self.setup_parameters(params)
         # port must be an even integer number between 5554 and 5680
-        params[:avd_port]=Random.rand(50)*2+5580 if params[:avd_port].nil?
+        params[:avd_port]=Random.rand(15)*2+5554 if params[:avd_port].nil?
         raise ":avd_port must be at least 5554" if params[:avd_port]<5554
-        raise ":avd_port must be lower than 5680" if params[:avd_port]>5680
+        raise ":avd_port must be lower than 5584" if params[:avd_port]>5584
         raise ":avd_port must be an even number" if params[:avd_port]%2 != 0
 
         params[:avd_hide]=Helper.is_ci? if params[:avd_hide].nil?
