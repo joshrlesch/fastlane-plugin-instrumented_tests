@@ -65,7 +65,7 @@ module Fastlane
         ui_args="-gpu on"
         ui_args="-no-window" if params[:avd_hide]
         ui_args=params[:avd_emulator_options] if params[:avd_emulator_options] != nil
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
+        start_avd = ["#{params[:sdk_path]}/tools/#{params[:avd_emulator_binary]}", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
 
         UI.command(start_avd)
         stdin, @emulator_output, @emulator_thread = Open3.popen2e(start_avd)
@@ -191,6 +191,12 @@ module Fastlane
                                        description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
                                        is_string: false,
                                        optional: true),
+          FastlaneCore::ConfigItem.new(key: :avd_emulator_binary,
+                                       env_name: "AVD_EMULATOR_BINARY",
+                                       description: "Name of the binary used to execute the emulator. ('emulator', 'emulator64-arm', 'emulator64-mips', 'emulator64-x86')",
+                                       is_string: true,
+                                       optional: false,
+                                       default_value: "emulator"),
           FastlaneCore::ConfigItem.new(key: :avd_emulator_options,
                                        env_name: "AVD_EMULATOR_OPTIONS",
                                        description: "Other options passed to the emulator command ('emulator -avd AVD_NAME ...')." +
