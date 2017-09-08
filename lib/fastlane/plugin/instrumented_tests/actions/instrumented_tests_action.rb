@@ -50,22 +50,20 @@ module Fastlane
       end
 
       def self.create_emulator(params)
-        avd_name = "--name \"#{params[:avd_name]}\""
-        target_id = "--target #{params[:target_id]}"
-        avd_options = params[:avd_options] unless params[:avd_options].nil?
-        avd_abi = "--abi #{params[:avd_abi]}" unless params[:avd_abi].nil?
-        avd_tag = "--tag #{params[:avd_tag]}" unless params[:avd_tag].nil?
-        create_avd = ["#{params[:sdk_path]}/tools/android", "create avd", avd_name, target_id, avd_abi, avd_tag, avd_options].join(" ")
+        avd_name = "--name '#{params[:avd_name]}'"
+        avd_package = "--package #{params[:avd_package]}"
+        avd_abi = "--abi #{params[:avd_abi]}"
+        create_avd = ["echo no | #{params[:sdk_path]}/tools/bin/avdmanager", "create avd", avd_package, avd_name, avd_abi]
         UI.important("Creating AVD...")
         Action.sh(create_avd)
       end
 
       def self.start_emulator(params)
         UI.important("Starting AVD...")
-        ui_args="-gpu on"
-        ui_args="-no-window" if params[:avd_hide]
-        ui_args=params[:avd_emulator_options] if params[:avd_emulator_options] != nil
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
+        ui_args = "-gpu on"
+        ui_args >> "-no-window" if params[:avd_hide]
+        ui_args >> params[:emulator_options] if params[:emulator_options] != nil
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:emulator_port]}" ].join(" ")
 
         UI.command(start_avd)
         stdin, @emulator_output, @emulator_thread = Open3.popen2e(start_avd)
@@ -155,28 +153,18 @@ module Fastlane
                                        description: "Name of the avd to be created",
                                        is_string: true,
                                        optional: false),
-          FastlaneCore::ConfigItem.new(key: :target_id,
-                                       env_name: "TARGET_ID",
-                                       description: "Target id of the avd to be created, get list of installed target by running command 'android list targets'",
-                                       is_string: true,
-                                       optional: false),
-          FastlaneCore::ConfigItem.new(key: :avd_options,
-                                       env_name: "AVD_OPTIONS",
-                                       description: "Other avd command line options passed to 'android create avd ...'. i.e. \"--scale 96dpi --dpi-device 160\"",
-                                       is_string: true,
-                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :avd_abi,
                                        env_name: "AVD_ABI",
-                                       description: "The ABI to use for the AVD. The default is to auto-select the ABI if the platform has only one ABI for its system images",
+                                       description: "The ABI to use for the AVD (e.g. google_apis/x86)",
                                        is_string: true,
-                                       optional: true),
-          FastlaneCore::ConfigItem.new(key: :avd_tag,
-                                       env_name: "AVD_TAG",
-                                       description: "The sys-img tag to use for the AVD. The default is to auto-select if the platform has only one tag for its system images",
+                                       optional: false),
+          FastlaneCore::ConfigItem.new(key: :avd_package,
+                                       env_name: "AVD_PACKAGE",
+                                       description: "Package path of the system image for this AVD (e.g. 'system-images;android-19;google_apis;x86')",
                                        is_string: true,
-                                       optional: true),
-          FastlaneCore::ConfigItem.new(key: :avd_port,
-                                       env_name: "AVD_PORT",
+                                       optional: false),
+          FastlaneCore::ConfigItem.new(key: :emulator_port,
+                                       env_name: "EMULATOR_PORT",
                                        description: "The port used for communication with the emulator. If not set it is randomly selected",
                                        is_string: false,
                                        optional: true),
@@ -186,13 +174,8 @@ module Fastlane
                                        is_string: false,
                                        optional: true,
                                        default_value: 500),
-          FastlaneCore::ConfigItem.new(key: :avd_hide,
-                                       env_name: "AVD_HIDE",
-                                       description: "Hide the avd interface, required for CI. Default true if on CI, false if not on CI",
-                                       is_string: false,
-                                       optional: true),
-          FastlaneCore::ConfigItem.new(key: :avd_emulator_options,
-                                       env_name: "AVD_EMULATOR_OPTIONS",
+          FastlaneCore::ConfigItem.new(key: :emulator_options,
+                                       env_name: "EMULATOR_OPTIONS",
                                        description: "Other options passed to the emulator command ('emulator -avd AVD_NAME ...')." +
                                            "Defaults are '-gpu on' when AVD_HIDE is false and '-no-window' otherwise. " +
                                            "For macs running the CI you might want to use '-no-audio -no-window'",
