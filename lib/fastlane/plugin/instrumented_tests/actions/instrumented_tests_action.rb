@@ -36,8 +36,6 @@ module Fastlane
         raise ":avd_port must be lower than 5584" if params[:avd_port]>5584
         raise ":avd_port must be an even number" if params[:avd_port]%2 != 0
 
-        params[:avd_hide]=Helper.is_ci? if params[:avd_hide].nil?
-
         @android_serial="emulator-#{params[:avd_port]}"
       end
 
@@ -61,9 +59,9 @@ module Fastlane
       def self.start_emulator(params)
         UI.important("Starting AVD...")
         ui_args = "-gpu on"
-        ui_args >> "-no-window" if params[:avd_hide]
-        ui_args >> params[:emulator_options] if params[:emulator_options] != nil
-        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:emulator_port]}" ].join(" ")
+        ui_args << " -no-window" if params[:avd_hide]
+        ui_args << " " << params[:emulator_options] if params[:emulator_options] != nil
+        start_avd = ["#{params[:sdk_path]}/tools/emulator", "-avd #{params[:avd_name]}", "#{ui_args}", "-port #{params[:avd_port]}" ].join(" ")
 
         UI.command(start_avd)
         stdin, @emulator_output, @emulator_thread = Open3.popen2e(start_avd)
@@ -163,8 +161,8 @@ module Fastlane
                                        description: "Package path of the system image for this AVD (e.g. 'system-images;android-19;google_apis;x86')",
                                        is_string: true,
                                        optional: false),
-          FastlaneCore::ConfigItem.new(key: :emulator_port,
-                                       env_name: "EMULATOR_PORT",
+          FastlaneCore::ConfigItem.new(key: :avd_port,
+                                       env_name: "AVD_PORT",
                                        description: "The port used for communication with the emulator. If not set it is randomly selected",
                                        is_string: false,
                                        optional: true),
@@ -202,7 +200,13 @@ module Fastlane
                                        env_name: 'FL_GRADLE_PROJECT_DIR',
                                        description: 'The root directory of the gradle project. Defaults to `.`',
                                        default_value: '.',
-                                       is_string: true)
+                                       is_string: true),
+          FastlaneCore::ConfigItem.new(key: :avd_hide,
+                                       env_name: "AVD_HIDE",
+                                       description: "Specifies whether the emulator should be hidden or not (defaults to true)",
+                                       default_value: true,
+                                       is_string: false,
+                                       optional: true)
         ]
       end
 
