@@ -34,12 +34,12 @@ instrumented_tests(
 
 To run both the tests, and code style validation, run
 
-````
+```bash
 rake
 ```
 
 To automatically fix many of the styling issues, use 
-```
+```bash
 rubocop -a
 ```
 
